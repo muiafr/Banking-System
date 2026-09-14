@@ -1,8 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class Deposit(BaseModel):
-    user_id: int
-    amount: int
-    created_at: datetime
+    user_id: int = Field(ge = 1)
+    amount: int = Field(ge=1)
+    created_at: datetime = Field(default_factory = datetime.now)
