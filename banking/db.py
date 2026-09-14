@@ -119,7 +119,7 @@ def insert_user(cursor, nickname, first_name, last_name, email, phone_number, pa
     cursor.execute(
         "INSERT INTO users (nickname, first_name, last_name, email, phone_number, password, balance) "
         "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-        (user_nickname, first_name, last_name, email, phone_number, password_hash, balance)
+        (nickname, first_name, last_name, email, phone_number, password_hash, balance)
     )
     return cursor.lastrowid
 

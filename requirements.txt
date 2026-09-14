@@ -10,3 +10,7 @@ python-dotenv==1.2.3
 requests==2.34.2
 transactions==0.2.0
 urllib3==2.7.0
+
+sqlalchemy
+fastapi
+pydantic

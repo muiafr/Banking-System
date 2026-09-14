@@ -3,6 +3,18 @@ from banking.profile.user_inf import user_info
 from banking.profile.user_transactions.transaction_menu import transaction_menu
 from banking.profile.user_transactions.deposit import deposit
 
+from fastapi import FastAPI
+
+from banking.routes import users
+from banking.routes import transactions
+from banking.routes import deposits
+
+app = FastAPI()
+
+app.include_router(users.router)
+#app.include_router(transactions.router)
+#app.include_router(deposits.router)
+
 
 def main():
     ensure_tables()
@@ -28,5 +40,10 @@ def main():
                 print("Invalid choice")
 
 
+
+
+
+
 if __name__ == "__main__":
     main()
+
