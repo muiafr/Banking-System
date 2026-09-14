@@ -14,3 +14,4 @@ urllib3==2.7.0
 sqlalchemy
 fastapi
 pydantic
+uvicorn

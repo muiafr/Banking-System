@@ -1,31 +1,22 @@
 import uvicorn
-from fastapi import FastAPI, Depends
-from sqlalchemy.orm import Session
+from fastapi import FastAPI
 
-from banking.database import SessionLocal
-from banking.models.user import User
+from banking.routes import users
+from banking.routes import transactions
+from banking.routes import deposits
+
 
 app = FastAPI()
 
 
-def get_db():
-    db = SessionLocal()
-
-    try:
-        yield db
-    finally:
-        db.close()
+app.include_router(users.router)
+app.include_router(transactions.router)
+app.include_router(deposits.router)
 
 
-@app.get("/users")
-def get_users(db: Session = Depends(get_db)):
-    return db.query(User).all()
-
-
-@app.get("/users/{user_id}")
-def get_user(user_id: int, db: Session = Depends(get_db)):
-    return db.query(User).filter(User.id == user_id).first()
-
-
-if __name__ == '__main__':
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+if __name__ == "__main__":
+    uvicorn.run(
+        app,
+        host="127.0.0.1",
+        port=8000
+    )
