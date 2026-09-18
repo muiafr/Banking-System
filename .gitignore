@@ -14,3 +14,4 @@ __pycache__/
 
 user_info.json
 transactions.json
+.pytest_cache/

@@ -1,119 +1,104 @@
-# Banking System
+# Banking Backend
 
-A Python banking application with a command-line interface, a MySQL data layer, and a small FastAPI interface. The project manages users, balances, deposits, and transfers; the same MySQL tables are used by the CLI and the API models.
+FastAPI backend на основе исходного Banking System. Python 3.10+.
+Исходные таблицы `users`, `deposits`, `transactions`, имена колонок и денежный тип
+`DECIMAL(10,2)` сохранены. Исходная папка и база данных не изменялись.
 
-## Features
+## Запуск
 
-### Command-line application
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+# Заполните .env своими параметрами MySQL.
+# Предварительно создайте banking_system в MySQL, если базы ещё нет.
+python -m banking.database.init_db
+uvicorn banking.main:app --reload
+```
 
-- Creates the `users`, `transactions`, and `deposits` tables on startup when they do not exist.
-- Creates, views, updates, and deletes user profiles.
-- Checks unique nicknames, emails, and phone numbers when a user is created.
-- Validates email addresses, phone numbers, positive amounts, and password strength.
-- Stores passwords as SHA-256 hashes in the CLI flow.
-- Adds deposits to a user's balance and records each deposit with a timestamp.
-- Sends money between two different users, checks for sufficient balance, and records the transfer.
-- Uses `SELECT ... FOR UPDATE` while reading the sender balance for a transfer.
-- Shows a user's transaction history, ordered from newest to oldest.
+Swagger: http://127.0.0.1:8000/docs. Совместимы также `main:app` и `backend.api:app`.
+`python main.py` больше не запускает меню: все операции доступны через API.
+Реальный `.env` намеренно не включён в архив; можно скопировать его из исходного проекта.
+Переменные окружения имеют приоритет над `.env`; `DATABASE_URL` при наличии заменяет MYSQL_*.
+Пароли со специальными символами корректно обрабатываются при использовании MYSQL_*.
 
-### FastAPI interface
+`init_db` создаёт только недостающие таблицы, не очищает данные и не изменяет существующую схему.
+Для дальнейших изменений схемы добавьте Alembic. На MySQL таблицы должны использовать InnoDB,
+чтобы работали транзакции, внешние ключи и блокировки строк. Запуск API не требует DDL-прав.
 
-- Uses FastAPI, SQLAlchemy, and Pydantic schemas.
-- Provides read endpoints for users, transactions, and deposits.
-- Provides a user-creation endpoint with Pydantic validation.
-
-> The API currently exposes data retrieval and user creation. Deposits and transfers are created through the CLI, not through API POST endpoints.
-
-## Tech stack
-
-- Python
-- MySQL
-- `mysql-connector-python` for the CLI data access layer
-- SQLAlchemy and PyMySQL for the FastAPI models/session
-- FastAPI, Pydantic, and Uvicorn
-- `python-dotenv` for database configuration
-
-## Project structure
+## Структура
 
 ```text
-.
-├── main.py                         # CLI entry point
-├── backend/
-│   └── api.py                      # FastAPI application entry point
-├── banking/
-│   ├── db.py                       # MySQL helpers and table creation
-│   ├── database.py                 # SQLAlchemy engine and session
-│   ├── models/                     # SQLAlchemy models
-│   ├── routes/                     # FastAPI routers
-│   ├── schemas/                    # Pydantic request schemas
-│   ├── profile/                    # CLI menus and operations
-│   └── validators.py               # CLI input validation and hashing
-└── requirements.txt
+banking/
+  core/          # .env, ошибки, интерфейс хеширования
+  database/      # Base, engine, SessionLocal, get_db, init_db
+  models/        # существующие SQLAlchemy-модели + внешние ключи
+  schemas/       # запросы, валидация, ответы без пароля
+  services/      # бизнес-операции и транзакции
+  routes/        # HTTP-обработчики
+  main.py        # приложение, роутеры, обработчики ошибок
+main.py          # короткий импорт приложения
+backend/api.py   # совместимость старого пути запуска
+tests/          # изолированные проверки API (SQLite)
 ```
 
-## Database configuration
+## API
 
-Create a `.env` file in the project root:
+| Метод | URL | Действие |
+|---|---|---|
+| GET, POST | `/users/` | Список / создание пользователя |
+| GET, PATCH, DELETE | `/users/{id}` | Профиль / изменение / удаление |
+| POST | `/users/users` | Старый адрес создания, deprecated |
+| GET, POST | `/deposits/` | Список / пополнение |
+| GET | `/deposits/{id}` | Пополнение по ID |
+| GET, POST | `/transactions/` | Список / перевод |
+| GET | `/transactions/{id}` | Перевод по ID |
+| GET | `/transactions/user/{id}` | Входящие и исходящие, новые сначала |
+| GET | `/health` | Проверка процесса, без проверки БД |
 
-```env
-MYSQL_HOST=localhost
-MYSQL_USER=your_mysql_user
-MYSQL_PASSWORD=your_mysql_password
-MYSQL_DATABASE=banking_system
-```
+`GET /users/` поддерживает точные фильтры `nickname`, `email`, `phone_number`.
+Так можно найти ID по nickname перед пополнением или переводом.
+Создание пользователя: nickname, first_name, last_name, email, phone_number, password,
+необязательный balance (по умолчанию 0). PATCH принимает nickname, email, phone_number,
+password; прямое редактирование баланса запрещено.
 
-Create the database in MySQL before starting the application. The CLI creates the required tables automatically on its first run.
+Пополнение: `{"user_id":1,"amount":"10.25"}`.
+Перевод: `{"sender_id":1,"recipient_id":2,"amount":"5.10"}`.
+Время операции устанавливает сервер, сохраняя прежний формат локального DATETIME.
+Деньги в JSON-ответах передаются строками для точного представления Decimal.
 
-## Installation
+## Сохранённые правила и исправления
+
+- Уникальные nickname/email/phone, проверка email и телефона (7–15 цифр).
+- Пароль от 8 символов с одним из `!@#$%^&*`, SHA-256 как в исходном CLI.
+- Начальный баланс допускает 0, как в исходной API-схеме.
+- Положительные пополнения и переводы, запрет перевода самому себе и проверки остатка.
+- Удаление пользователя с финансовой историей запрещено.
+- Изменения обоих балансов и запись истории выполняются атомарно;
+  обе строки пользователей блокируются в порядке ID, ошибки откатывают операцию.
+- Вместо float используется Decimal; дроби меньше копейки и переполнение баланса отклоняются.
+- Пароль больше не сохраняется открытым новым API и не возвращается в ответах.
+- Удалены CLI-меню, дублирующий mysql.connector-слой и неиспользуемые зависимости.
+- 404 для отсутствующих записей, 409 для конфликтов/недостатка средств,
+  422 для неверных полей, 503 для ошибок БД без раскрытия SQL или параметров подключения.
+
+## Проверка и расширение
 
 ```bash
-git clone <repository-url>
-cd <repository-folder>
-python -m venv .venv
+pip install -r requirements-dev.txt
+python -m unittest discover -s tests -v
+# либо pytest tests
 ```
 
-Activate the virtual environment, then install the listed dependencies:
+Проверяются CRUD, хеширование и скрытие пароля, точные суммы, история, защита удаления,
+конфликты, недопустимые данные, недостаток средств, переполнение и откат при сбое записи.
+Проверки используют SQLite в памяти, не подключаются к вашей базе.
+Блокировки и конкурентные переводы на настоящей MySQL требуют отдельных интеграционных тестов.
 
-```bash
-pip install -r requirements.txt
-```
-
-The API code also imports `pymysql` and uses Pydantic's `EmailStr`; install `PyMySQL` and `email-validator` if they are not already available in your environment:
-
-```bash
-pip install PyMySQL email-validator
-```
-
-## Run the CLI
-
-```bash
-python main.py
-```
-
-Choose a menu section to manage user profiles, transfers, or deposits.
-
-## Run the API
-
-```bash
-uvicorn backend.api:app --reload
-```
-
-The server starts at `http://127.0.0.1:8000`. Interactive API documentation is available at `/docs`.
-
-## API routes currently implemented
-
-| Method | Route | Purpose |
-| --- | --- | --- |
-| `GET` | `/users/` | List users |
-| `GET` | `/users/{user_id}` | Get a user by ID |
-| `POST` | `/users/users` | Create a user |
-| `GET` | `/transactions/` | List transactions |
-| `GET` | `/transactions/{transaction_id}` | Get a transaction by ID |
-| `GET` | `/deposits/` | List deposits |
-| `GET` | `/deposits/{deposit_id}` | Get a deposit by ID |
-
-## Notes
-
-This is a learning project, not a production banking service. Before production use it would need, among other work, a stronger password-hashing algorithm, authentication and authorization, API error handling, and automated tests.
-
-The source also declares `GET /transactions/user/{user_id}`. Because `GET /transactions/{transaction_id}` is registered first, the more general route currently matches that URL first; reordering those two declarations is needed before the user-specific API route can be used.
+JWT ещё не реализован: API пока не проверяет, кому принадлежат счёт и операция.
+Перед публичным использованием необходимы авторизация и привязка операций к текущему пользователю.
+SHA-256 сохранён для совместимости; `core/security.py` — точка замены на Argon2/bcrypt
+с миграцией старых хешей. Старые открытые пароли, сохранённые прежним API, автоматически
+не изменяются: для них потребуется сброс пароля или отдельная миграция.
+Для Docker подготовлены конфигурация окружения и `.dockerignore`; Dockerfile и JWT не добавлены.
